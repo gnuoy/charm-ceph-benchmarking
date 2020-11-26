@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import glob
 import hashlib
 import json
 import socket
@@ -244,18 +245,33 @@ class CephBenchmarkingCharmBase(ops_openstack.core.OSBaseCharm):
         self.install_pkgs()
         # Perform install tasks
         snap_path = None
-        try:
-            snap_path = self.model.resources.fetch(self.SNAP_NAME)
-        except ops.model.ModelError:
-            self.unit.status = ops.model.BlockedStatus(
-                "Upload swift-bench snap resource to proceed")
-            logging.warning(
-                "No snap resource available, install blocked, deferring event:"
-                " {}".format(event.handle)
-            )
-            self._defer_once(event)
+        local_snaps = glob.glob('./src/snap/*snap')
+        if local_snaps:
+            if len(local_snaps) > 1:
+                self.unit.status = ops.model.BlockedStatus(
+                    "Resource failed to install")
+                logging.error(
+                    "Could not install local resource, multiple snaps found"
+                )
+                return
+            else:
+                snap_path = local_snaps[0]
+                logging.info(
+                    "Installing snap from charm tree: {}".format(snap_path)
+                )
+        else:
+            try:
+                snap_path = self.model.resources.fetch(self.SNAP_NAME)
+            except ops.model.ModelError:
+                self.unit.status = ops.model.BlockedStatus(
+                    "Upload swift-bench snap resource to proceed")
+                logging.warning(
+                    "No snap resource available, install blocked, "
+                    "deferring event: {}".format(event.handle)
+                )
+                self._defer_once(event)
 
-            return
+                return
         # Install the resource
         try:
             snap.snap_install(
